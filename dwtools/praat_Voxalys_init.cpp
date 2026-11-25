@@ -71,14 +71,14 @@ DO
 void praat_Voxalys_init () {
 	/* Objects -> New -> Voxalys */
 	praat_addMenuCommand (U"Objects", U"New", U"Voxalys", nullptr, 0, nullptr);
-	praat_addMenuCommand (U"Objects", U"New", U"Record Interactive VRP (live)...", U"Voxalys", 1 | GuiMenu_NO_API,
+	praat_addMenuCommand (U"Objects", U"New", U"Record Interactive VRP (live)...", nullptr, GuiMenu_DEPTH_1 | GuiMenu_NO_API,
 		WINDOW_Voxalys_recordInteractiveVRP);
 
 	/* Sound dynamic action menu -> Voxalys - */
 	praat_addAction1 (classSound, 0, U"Voxalys -", nullptr, 0, nullptr);
-	praat_addAction1 (classSound, 1, U"Voxalys analyze voice & JoVoice metrics...", nullptr, 1,
+	praat_addAction1 (classSound, 1, U"Voxalys analyze voice & JoVoice metrics...", nullptr, GuiMenu_DEPTH_1,
 		INFO_ONE__Sound_voxalysAnalyzeVoice);
-	praat_addAction1 (classSound, 0, U"Voxalys compute VRP trajectory Table...", nullptr, 1,
+	praat_addAction1 (classSound, 0, U"Voxalys compute VRP trajectory Table...", nullptr, GuiMenu_DEPTH_1,
 		CONVERT_EACH_TO_ONE__Sound_voxalysToVRPTable);
 }
 
