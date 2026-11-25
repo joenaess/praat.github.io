@@ -38,9 +38,12 @@ Thing_define (VoxalysVrpRecorder, Editor) {
 	double sampleRate;
 	double f0Floor;
 	double f0Ceiling;
+	double viewF0Min;
+	double viewF0Max;
 	double splFloor;
 	double splCeiling;
 	double splCalibrationOffset_dB;
+	bool useSemitoneScale;
 
 	bool recording;
 	bool paused;
@@ -61,6 +64,10 @@ Thing_define (VoxalysVrpRecorder, Editor) {
 	GuiDrawingArea canvas;
 	GuiLabel statusLabel;
 	GuiText recordingNameField;
+	GuiButton bassPresetButton;
+	GuiButton fullPresetButton;
+	GuiButton autoFitButton;
+	GuiButton scaleToggleButton;
 	GuiButton startButton;
 	GuiButton pauseButton;
 	GuiButton clearButton;

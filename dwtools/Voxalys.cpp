@@ -333,40 +333,86 @@ static void stopAudioStream (VoxalysVrpRecorder me) noexcept {
 	}
 }
 
+static double hzToSemitones (double hz) noexcept {
+	return 12.0 * std::log2 (hz / 100.0);
+}
+
 static void drawVrpCanvas (VoxalysVrpRecorder me) {
 	if (! my graphics)
 		return;
 	Graphics g = my graphics.get();
 	Graphics_clearWs (g);
 	Graphics_setInner (g);
-	Graphics_setWindow (g, my f0Floor, my f0Ceiling, my splFloor, my splCeiling);
 
-	/* Subtle background grid and axes. */
+	const double xMin = my useSemitoneScale ? hzToSemitones (my viewF0Min) : my viewF0Min;
+	const double xMax = my useSemitoneScale ? hzToSemitones (my viewF0Max) : my viewF0Max;
+	Graphics_setWindow (g, xMin, xMax, my splFloor, my splCeiling);
+
+	/* Axes and grid. */
 	Graphics_setColour (g, Melder_BLACK);
 	Graphics_setLineWidth (g, 1.0);
 	Graphics_setFontSize (g, 10.0);
 	Graphics_drawInnerBox (g);
-	Graphics_marksBottomEvery (g, 1.0, 50.0, true, true, true);
-	Graphics_marksLeftEvery (g, 1.0, 10.0, true, true, true);
-	Graphics_textBottom (g, true, U"Fundamental Frequency F0 (Hz)");
+
+	if (my useSemitoneScale) {
+		struct NoteLandmark { double hz; conststring32 label; };
+		static constexpr NoteLandmark landmarks [] = {
+			{ 55.00,   U"A1\n55" },
+			{ 65.41,   U"C2\n65" },
+			{ 82.41,   U"E2\n82" },
+			{ 110.00,  U"A2\n110" },
+			{ 130.81,  U"C3\n131" },
+			{ 164.81,  U"E3\n165" },
+			{ 220.00,  U"A3\n220" },
+			{ 261.63,  U"C4\n262" },
+			{ 329.63,  U"E4\n330" },
+			{ 440.00,  U"A4\n440" },
+			{ 523.25,  U"C5\n523" },
+			{ 659.25,  U"E5\n659" },
+			{ 880.00,  U"A5\n880" },
+			{ 1046.50, U"C6\n1047" },
+		};
+		for (const auto &lm : landmarks) {
+			if (lm.hz >= my viewF0Min && lm.hz <= my viewF0Max)
+				Graphics_markBottom (g, hzToSemitones (lm.hz), false, true, true, lm.label);
+		}
+		Graphics_textBottom (g, true, U"Fundamental Frequency F0 (semitone scale: Note / Hz)");
+	} else {
+		const double span = my viewF0Max - my viewF0Min;
+		const double stepHz = span <= 250.0 ? 25.0 : (span <= 550.0 ? 50.0 : 100.0);
+		Graphics_marksBottomEvery (g, 1.0, stepHz, true, true, true);
+		Graphics_textBottom (g, true, U"Fundamental Frequency F0 (Hz, linear)");
+	}
+
+	const double splSpan = my splCeiling - my splFloor;
+	const double splStep = splSpan <= 40.0 ? 5.0 : 10.0;
+	Graphics_marksLeftEvery (g, 1.0, splStep, true, true, true);
 	Graphics_textLeft (g, true, U"Intensity / SPL (dB)");
-	Graphics_textTop (g, false, U"Voxalys Interactive VRP (Blue = Start -> Red = End)");
+	Graphics_textTop (g, false, Melder_cat (
+		U"Voxalys Interactive VRP [", Melder_fixed (my viewF0Min, 0), U"-", Melder_fixed (my viewF0Max, 0),
+		U" Hz | ", Melder_fixed (my splFloor, 0), U"-", Melder_fixed (my splCeiling, 0),
+		U" dB] (Blue = Start -> Red = End)"
+	));
+
+	auto mapX = [me](double hz) noexcept -> double {
+		return my useSemitoneScale ? hzToSemitones (hz) : hz;
+	};
 
 	/* Draw voiced VRP points with chronological color progression and compute envelope. */
 	std::map<int, std::pair<double, double>> envBySemitone;
 	const size_t total = my points.size();
 	for (size_t idx = 0; idx < total; idx ++) {
 		const VoxalysVrpPoint &pt = my points [idx];
-		if (! pt.voiced || pt.f0_hz < my f0Floor || pt.f0_hz > my f0Ceiling)
+		if (! pt.voiced || pt.f0_hz < my viewF0Min || pt.f0_hz > my viewF0Max)
 			continue;
 		if (pt.spl_db < my splFloor || pt.spl_db > my splCeiling)
 			continue;
 
 		const double frac = total > 1 ? static_cast<double> (idx) / static_cast<double> (total - 1) : 0.0;
 		Graphics_setColour (g, vrpProgressColour (frac));
-		Graphics_fillCircle_mm (g, static_cast<double> (pt.f0_hz), static_cast<double> (pt.spl_db), 2.2);
+		Graphics_fillCircle_mm (g, mapX (static_cast<double> (pt.f0_hz)), static_cast<double> (pt.spl_db), 2.2);
 
-		const int stBin = static_cast<int> (std::lround (12.0 * std::log2 (static_cast<double> (pt.f0_hz) / 100.0)));
+		const int stBin = static_cast<int> (std::lround (hzToSemitones (static_cast<double> (pt.f0_hz))));
 		auto it = envBySemitone.find (stBin);
 		if (it == envBySemitone.end()) {
 			envBySemitone [stBin] = { static_cast<double> (pt.spl_db), static_cast<double> (pt.spl_db) };
@@ -381,16 +427,17 @@ static void drawVrpCanvas (VoxalysVrpRecorder me) {
 		Graphics_setColour (g, Melder_BLACK);
 		Graphics_setLineWidth (g, 1.5);
 		bool hasPrev = false;
-		double prevF0 = 0.0, prevMin = 0.0, prevMax = 0.0;
+		double prevX = 0.0, prevMin = 0.0, prevMax = 0.0;
 		for (const auto &kv : envBySemitone) {
 			const double binF0 = 100.0 * std::pow (2.0, static_cast<double> (kv.first) / 12.0);
-			if (binF0 < my f0Floor || binF0 > my f0Ceiling)
+			if (binF0 < my viewF0Min || binF0 > my viewF0Max)
 				continue;
+			const double curX = mapX (binF0);
 			if (hasPrev) {
-				Graphics_line (g, prevF0, prevMin, binF0, kv.second.first);
-				Graphics_line (g, prevF0, prevMax, binF0, kv.second.second);
+				Graphics_line (g, prevX, prevMin, curX, kv.second.first);
+				Graphics_line (g, prevX, prevMax, curX, kv.second.second);
 			}
-			prevF0 = binF0;
+			prevX = curX;
 			prevMin = kv.second.first;
 			prevMax = kv.second.second;
 			hasPrev = true;
@@ -399,11 +446,11 @@ static void drawVrpCanvas (VoxalysVrpRecorder me) {
 
 	/* Highlight the live cursor point. */
 	if (my hasLatestPoint && my latestPoint.voiced
-			&& my latestPoint.f0_hz >= my f0Floor && my latestPoint.f0_hz <= my f0Ceiling
+			&& my latestPoint.f0_hz >= my viewF0Min && my latestPoint.f0_hz <= my viewF0Max
 			&& my latestPoint.spl_db >= my splFloor && my latestPoint.spl_db <= my splCeiling) {
 		Graphics_setColour (g, Melder_RED);
 		Graphics_setLineWidth (g, 2.0);
-		Graphics_circle_mm (g, static_cast<double> (my latestPoint.f0_hz), static_cast<double> (my latestPoint.spl_db), 4.0);
+		Graphics_circle_mm (g, mapX (static_cast<double> (my latestPoint.f0_hz)), static_cast<double> (my latestPoint.spl_db), 4.0);
 	}
 
 	Graphics_unsetInner (g);
@@ -606,6 +653,105 @@ static void gui_button_cb_save (VoxalysVrpRecorder me, GuiButtonEvent /* event *
 	}
 }
 
+static void setDisplayRanges (VoxalysVrpRecorder me, double f0Min, double f0Max, double splMin, double splMax) {
+	if (f0Min < 20.0 || f0Max <= f0Min || splMax <= splMin)
+		return;
+	my viewF0Min = f0Min;
+	my viewF0Max = f0Max;
+	my splFloor = splMin;
+	my splCeiling = splMax;
+	if (my graphics)
+		Graphics_updateWs (my graphics.get());
+}
+
+static void autoFitToPoints (VoxalysVrpRecorder me) {
+	double minF0 = 1e9, maxF0 = 0.0;
+	double minSpl = 1e9, maxSpl = -1e9;
+	size_t count = 0;
+	for (const auto &pt : my points) {
+		if (! pt.voiced || pt.f0_hz <= 0.0f)
+			continue;
+		minF0 = std::min (minF0, static_cast<double> (pt.f0_hz));
+		maxF0 = std::max (maxF0, static_cast<double> (pt.f0_hz));
+		minSpl = std::min (minSpl, static_cast<double> (pt.spl_db));
+		maxSpl = std::max (maxSpl, static_cast<double> (pt.spl_db));
+		count ++;
+	}
+	if (count == 0)
+		return;
+	/* Add ~2 semitones padding on pitch and +/- 6 dB on SPL. */
+	const double padF0Min = std::max (40.0, std::floor (minF0 / std::pow (2.0, 2.0 / 12.0)));
+	const double padF0Max = std::min (1200.0, std::ceil (maxF0 * std::pow (2.0, 2.0 / 12.0)));
+	const double padSplMin = std::floor ((minSpl - 6.0) / 5.0) * 5.0;
+	const double padSplMax = std::ceil ((maxSpl + 6.0) / 5.0) * 5.0;
+	setDisplayRanges (me, padF0Min, std::max (padF0Max, padF0Min + 30.0),
+		padSplMin, std::max (padSplMax, padSplMin + 20.0));
+}
+
+static void gui_button_cb_bassPreset (VoxalysVrpRecorder me, GuiButtonEvent /* event */) {
+	setDisplayRanges (me, 50.0, 450.0, my splFloor, my splCeiling);
+}
+
+static void gui_button_cb_fullPreset (VoxalysVrpRecorder me, GuiButtonEvent /* event */) {
+	setDisplayRanges (me, 50.0, 1050.0, 40.0, 115.0);
+}
+
+static void gui_button_cb_autoFit (VoxalysVrpRecorder me, GuiButtonEvent /* event */) {
+	autoFitToPoints (me);
+}
+
+static void gui_button_cb_toggleScale (VoxalysVrpRecorder me, GuiButtonEvent /* event */) {
+	my useSemitoneScale = ! my useSemitoneScale;
+	if (my scaleToggleButton)
+		GuiButton_setText (my scaleToggleButton, my useSemitoneScale ? U"Scale: Log" : U"Scale: Hz");
+	if (my graphics)
+		Graphics_updateWs (my graphics.get());
+}
+
+static void menu_cb_displayRanges (VoxalysVrpRecorder me, EDITOR_ARGS) {
+	EDITOR_FORM (U"Voxalys VRP: Display ranges", nullptr)
+		POSITIVE (f0Min, U"F0 minimum (Hz)", U"50.0")
+		POSITIVE (f0Max, U"F0 maximum (Hz)", U"450.0")
+		REAL (splMin, U"SPL minimum (dB)", U"40.0")
+		REAL (splMax, U"SPL maximum (dB)", U"115.0")
+	EDITOR_OK
+		SET_REAL (f0Min, my viewF0Min)
+		SET_REAL (f0Max, my viewF0Max)
+		SET_REAL (splMin, my splFloor)
+		SET_REAL (splMax, my splCeiling)
+	EDITOR_DO
+		Melder_require (f0Min >= 20.0 && f0Max > f0Min,
+			U"F0 minimum must be >= 20 Hz and strictly below F0 maximum.");
+		Melder_require (splMax > splMin,
+			U"SPL maximum must be greater than SPL minimum.");
+		setDisplayRanges (me, f0Min, f0Max, splMin, splMax);
+	EDITOR_END
+}
+
+static void menu_cb_autoFit (VoxalysVrpRecorder me, EDITOR_ARGS) {
+	autoFitToPoints (me);
+}
+
+static void menu_cb_presetBass (VoxalysVrpRecorder me, EDITOR_ARGS) {
+	setDisplayRanges (me, 50.0, 450.0, my splFloor, my splCeiling);
+}
+
+static void menu_cb_presetTenorAlto (VoxalysVrpRecorder me, EDITOR_ARGS) {
+	setDisplayRanges (me, 75.0, 700.0, my splFloor, my splCeiling);
+}
+
+static void menu_cb_presetSoprano (VoxalysVrpRecorder me, EDITOR_ARGS) {
+	setDisplayRanges (me, 130.0, 1100.0, my splFloor, my splCeiling);
+}
+
+static void menu_cb_presetFull (VoxalysVrpRecorder me, EDITOR_ARGS) {
+	setDisplayRanges (me, 50.0, 1050.0, 40.0, 115.0);
+}
+
+static void menu_cb_toggleScale (VoxalysVrpRecorder me, EDITOR_ARGS) {
+	gui_button_cb_toggleScale (me, nullptr);
+}
+
 static void gui_button_cb_close (VoxalysVrpRecorder me, GuiButtonEvent /* event */) {
 	stopAudioStream (me);
 	forget (me);
@@ -645,15 +791,24 @@ void structVoxalysVrpRecorder :: v_createChildren () {
 
 	const integer canvasTop = topY + Gui_LABEL_HEIGHT + 12;
 	our canvas = GuiDrawingArea_createShown (
-		our windowForm, 16, -16, canvasTop, -96,
+		our windowForm, 16, -16, canvasTop, -98,
 		gui_drawingarea_cb_expose, nullptr, nullptr, gui_drawingarea_cb_resize, nullptr,
 		this, GuiDrawingArea_BORDER
 	);
 
 	const integer row1Bottom = -56;
-	GuiLabel_createShown (our windowForm, 16, 76, row1Bottom - Gui_TEXTFIELD_HEIGHT, row1Bottom, U"Name:", GuiLabel_RIGHT);
-	our recordingNameField = GuiText_createShown (our windowForm, 84, 280, row1Bottom - Gui_TEXTFIELD_HEIGHT, row1Bottom, 0);
+	GuiLabel_createShown (our windowForm, 16, 72, row1Bottom - Gui_TEXTFIELD_HEIGHT, row1Bottom, U"Name:", GuiLabel_RIGHT);
+	our recordingNameField = GuiText_createShown (our windowForm, 78, 250, row1Bottom - Gui_TEXTFIELD_HEIGHT, row1Bottom, 0);
 	GuiText_setString (our recordingNameField, U"Klient_01_VRP");
+
+	our bassPresetButton = GuiButton_createShown (our windowForm, 266, 386, row1Bottom - Gui_PUSHBUTTON_HEIGHT, row1Bottom,
+		U"Bass (50-450)", gui_button_cb_bassPreset, this, 0);
+	our fullPresetButton = GuiButton_createShown (our windowForm, 394, 514, row1Bottom - Gui_PUSHBUTTON_HEIGHT, row1Bottom,
+		U"Full (50-1050)", gui_button_cb_fullPreset, this, 0);
+	our autoFitButton = GuiButton_createShown (our windowForm, 522, 622, row1Bottom - Gui_PUSHBUTTON_HEIGHT, row1Bottom,
+		U"Auto-Fit", gui_button_cb_autoFit, this, 0);
+	our scaleToggleButton = GuiButton_createShown (our windowForm, 630, -16, row1Bottom - Gui_PUSHBUTTON_HEIGHT, row1Bottom,
+		U"Scale: Log", gui_button_cb_toggleScale, this, 0);
 
 	const integer row2Bottom = -16;
 	our startButton = GuiButton_createShown (our windowForm, 16, 106, row2Bottom - Gui_PUSHBUTTON_HEIGHT, row2Bottom,
@@ -670,6 +825,16 @@ void structVoxalysVrpRecorder :: v_createChildren () {
 
 void structVoxalysVrpRecorder :: v_createMenus () {
 	VoxalysVrpRecorder_Parent :: v_createMenus ();
+	Editor_addMenu (this, U"View", 0);
+	Editor_addCommand (this, U"View", U"Display ranges...", 0, menu_cb_displayRanges);
+	Editor_addCommand (this, U"View", U"Auto-fit to recorded points", 0, menu_cb_autoFit);
+	Editor_addCommand (this, U"View", U"-- presets --", 0, nullptr);
+	Editor_addCommand (this, U"View", U"Preset: Bass / Baritone (50-450 Hz)", 0, menu_cb_presetBass);
+	Editor_addCommand (this, U"View", U"Preset: Tenor / Alto (75-700 Hz)", 0, menu_cb_presetTenorAlto);
+	Editor_addCommand (this, U"View", U"Preset: Soprano (130-1100 Hz)", 0, menu_cb_presetSoprano);
+	Editor_addCommand (this, U"View", U"Preset: Full Clinical (50-1050 Hz)", 0, menu_cb_presetFull);
+	Editor_addCommand (this, U"View", U"-- scale --", 0, nullptr);
+	Editor_addCommand (this, U"View", U"Toggle Semitone (log) / Linear Hz scale", 0, menu_cb_toggleScale);
 }
 
 autoVoxalysVrpRecorder VoxalysVrpRecorder_create (
@@ -706,11 +871,14 @@ autoVoxalysVrpRecorder VoxalysVrpRecorder_create (
 
 		autoVoxalysVrpRecorder me = Thing_new (VoxalysVrpRecorder);
 		my sampleRate = 44100.0;
-		my f0Floor = f0Floor;
-		my f0Ceiling = f0Ceiling;
+		my f0Floor = std::min (50.0, f0Floor);
+		my f0Ceiling = std::max (1100.0, f0Ceiling);
+		my viewF0Min = f0Floor;
+		my viewF0Max = f0Ceiling;
 		my splFloor = splFloor;
 		my splCeiling = splCeiling;
 		my splCalibrationOffset_dB = splCalibrationOffset_dB;
+		my useSemitoneScale = true;
 		my recording = false;
 		my paused = false;
 		my hasLatestPoint = false;

@@ -25,7 +25,7 @@ static void cb_VoxalysVrpRecorder_publication (Editor /* me */, autoDaata public
 }
 
 FORM (WINDOW_Voxalys_recordInteractiveVRP, U"Voxalys: Record Interactive VRP (live)", nullptr) {
-	POSITIVE (f0Floor, U"F0 floor (Hz)", U"65.0")
+	POSITIVE (f0Floor, U"F0 floor (Hz)", U"50.0")
 	POSITIVE (f0Ceiling, U"F0 ceiling (Hz)", U"900.0")
 	REAL (splFloor, U"SPL floor (dB)", U"40.0")
 	REAL (splCeiling, U"SPL ceiling (dB)", U"115.0")
