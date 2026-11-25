@@ -1,4 +1,8 @@
-# Praat: doing phonetics by computer
+# Praat: doing phonetics by computer (Voxalys Native Edition)
+
+> **Voxalys Fork by Jonas Lindh ([hejAI AB](https://www.hejai.se/)):**  
+> This fork builds directly on upstream Praat 7 and adds **native real-time Interactive Voice Range Profile (VRP)** with a logarithmic semitone scale, aligned **live piano keyboard**, voice range presets, and a statically linked pure-Rust **JoVoice** DSP engine (`external/voxalys_rust/`).  
+> **See [`README_VOXALYS.md`](README_VOXALYS.md) for where to find the menus, how it works, and how to build & test it.**
 
 Welcome to Praat! Praat is a speech analysis tool used for doing phonetics by computer.
 Praat can analyse, synthesize, and manipulate speech, and create high-quality pictures for your publications.

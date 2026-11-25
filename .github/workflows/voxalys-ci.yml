@@ -49,7 +49,6 @@ jobs:
 
       - name: Build Praat with Voxalys Rust static library
         run: |
-          cp makefiles/makefile.defs.linux.pulse-gcc.LE makefile.defs
           make -j"$(nproc)"
           ./praat --version
 

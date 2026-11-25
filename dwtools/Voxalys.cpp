@@ -181,7 +181,7 @@ void Voxalys_analyzeSound (Sound me, double pitchFloor, double pitchCeiling, dou
 			static_cast<float> (splCalibrationOffset_dB)
 		));
 		if (! model.ptr)
-			Melder_throw (U"Voxalys Rust engine initialization failed: ", Melder_peek8to32 (voxalys_last_error ()));
+			Melder_throw (U"Voxalys Rust engine initialization failed: ", Melder_peek8to32_u (voxalys_last_error ()));
 
 		const std::vector<float> mono = extractMonoFloatSamples (me);
 		VoxalysSummaryResult summary {};
@@ -190,13 +190,13 @@ void Voxalys_analyzeSound (Sound me, double pitchFloor, double pitchCeiling, dou
 			static_cast<float> (sampleRate), & summary
 		);
 		if (rc != 0)
-			Melder_throw (U"Voxalys Rust analysis failed: ", Melder_peek8to32 (voxalys_last_error ()));
+			Melder_throw (U"Voxalys Rust analysis failed: ", Melder_peek8to32_u (voxalys_last_error ()));
 
 		/* 3. Emit formatted clinical report into Praat's Info window. */
 		MelderInfo_open ();
 		MelderInfo_writeLine (U"=== VOXALYS NATIVE VOICE & JOVOICE REPORT ===");
 		MelderInfo_writeLine (U"Sound: ", my name.get(), U" | Duration: ", Melder_fixed (duration, 3), U" s | Fs: ", Melder_fixed (sampleRate, 0), U" Hz");
-		MelderInfo_writeLine (U"Engine: ", Melder_peek8to32 (voxalys_version ()));
+		MelderInfo_writeLine (U"Engine: ", Melder_peek8to32_u (voxalys_version ()));
 		MelderInfo_writeLine (U"");
 		MelderInfo_writeLine (U"--- Praat Native Fundamental Frequency (CC) ---");
 		MelderInfo_writeLine (U"Mean F0:   ", Melder_fixed (f0MeanHz, 2), U" Hz (", Melder_fixed (f0MeanSt, 2), U" st re 100 Hz)");
@@ -251,7 +251,7 @@ autoTable Voxalys_Sound_to_VRPTable (Sound me, double pitchFloor, double pitchCe
 			static_cast<float> (splCalibrationOffset_dB)
 		));
 		if (! stream.ptr)
-			Melder_throw (U"Voxalys Rust stream initialization failed: ", Melder_peek8to32 (voxalys_last_error ()));
+			Melder_throw (U"Voxalys Rust stream initialization failed: ", Melder_peek8to32_u (voxalys_last_error ()));
 
 		std::vector<VoxalysVrpPoint> allPoints;
 		allPoints.reserve (mono.size() / 400 + 32);
@@ -657,13 +657,13 @@ static void startAudioStream (VoxalysVrpRecorder me) {
 		static_cast<void *> (me)
 	);
 	if (openErr != paNoError)
-		Melder_throw (U"Cannot open PortAudio input stream: ", Melder_peek8to32 (Pa_GetErrorText (openErr)));
+		Melder_throw (U"Cannot open PortAudio input stream: ", Melder_peek8to32_u (Pa_GetErrorText (openErr)));
 
 	const PaError startErr = Pa_StartStream (my portaudioStream);
 	if (startErr != paNoError) {
 		Pa_CloseStream (my portaudioStream);
 		my portaudioStream = nullptr;
-		Melder_throw (U"Cannot start PortAudio input stream: ", Melder_peek8to32 (Pa_GetErrorText (startErr)));
+		Melder_throw (U"Cannot start PortAudio input stream: ", Melder_peek8to32_u (Pa_GetErrorText (startErr)));
 	}
 	my recording = true;
 	my paused = false;
@@ -947,7 +947,7 @@ autoVoxalysVrpRecorder VoxalysVrpRecorder_create (
 		if (! MelderAudio_hasBeenInitialized) {
 			const PaError initErr = Pa_Initialize ();
 			if (initErr != paNoError)
-				Melder_throw (U"PortAudio initialization failed: ", Melder_peek8to32 (Pa_GetErrorText (initErr)));
+				Melder_throw (U"PortAudio initialization failed: ", Melder_peek8to32_u (Pa_GetErrorText (initErr)));
 			MelderAudio_hasBeenInitialized = true;
 		}
 
@@ -992,7 +992,7 @@ autoVoxalysVrpRecorder VoxalysVrpRecorder_create (
 			static_cast<float> (my splCalibrationOffset_dB)
 		);
 		if (! my rustStream)
-			Melder_throw (U"Voxalys Rust stream creation failed: ", Melder_peek8to32 (voxalys_last_error ()));
+			Melder_throw (U"Voxalys Rust stream creation failed: ", Melder_peek8to32_u (voxalys_last_error ()));
 
 		Editor_init (me.get(), 100, 100, 820, 620, U"Voxalys Interactive VRP (Live)", nullptr);
 		my graphics = Graphics_create_xmdrawingarea (my canvas);
