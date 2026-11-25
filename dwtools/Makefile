@@ -3,7 +3,7 @@
 
 CPPFLAGS += -I . -I ../kar -I ../melder -I ../sys -I ../dwsys -I ../stat -I ../fon -I ../LPC -I ../foned -I ../EEG \
 	-I ../external/clapack -I ../external/vorbis -I ../external/opusfile -I ../external/portaudio -I ../external/espeak \
-	-I ../external/xlsxio -I ..external/num
+	-I ../external/xlsxio -I ../external/voxalys_rust/include -I ..external/num
 
 OBJECTS = ActivationList.o AffineTransform.o AnalyticSound.o \
 	Categories.o CategoriesEditor.o \
@@ -56,9 +56,9 @@ OBJECTS = ActivationList.o AffineTransform.o AnalyticSound.o \
 	TableOfReal_extensions.o \
 	TableOfReal_and_Discriminant.o TableOfReal_and_Permutation.o \
 	TextGrid_and_DurationTier.o TextGrid_and_PitchTier.o TextGrid_extensions.o \
-	TextGridTierNavigator.o TextGridNavigator.o Vector_extensions.o VowelEditor.o \
+	TextGridTierNavigator.o TextGridNavigator.o Vector_extensions.o Voxalys.o VowelEditor.o \
 	praat_MDS_init.o praat_BSS_init.o praat_HMM_init.o \
-	praat_KlattGrid_init.o praat_MultiSampledSpectrogram.o praat_DataModeler_init.o praat_David_init.o
+	praat_KlattGrid_init.o praat_MultiSampledSpectrogram.o praat_DataModeler_init.o praat_Voxalys_init.o praat_David_init.o
 
 .PHONY: all clean
 

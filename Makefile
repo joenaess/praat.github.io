@@ -344,7 +344,7 @@ else ifeq ($(OS_IS_LINUX),1)
       NON_PRAAT_LIBRARIES := $(GRAPHICS_LINKER_FLAGS) -no-pie -lm $(AUDIO_LINKER_FLAGS) \
         -static-libgcc -static-libstdc++ -lpthread
     else
-      NON_PRAAT_LIBRARIES := $(GRAPHICS_LINKER_FLAGS) -no-pie -lm $(AUDIO_LINKER_FLAGS) -lpthread
+      NON_PRAAT_LIBRARIES := $(GRAPHICS_LINKER_FLAGS) -no-pie -lm $(AUDIO_LINKER_FLAGS) -lpthread -ldl
     endif
   endif
 
@@ -385,7 +385,7 @@ export RANLIB     # for creating the archive of object files in a subfolder
 export RM         # for `make clean`
 export WINDRES    # for compiling `main/praat_win.rc`
 
-.PHONY: all clean install
+.PHONY: all clean install voxalys_rust
 
 # Makes the Praat executable in the source directory.
 all: all-external all-self
@@ -409,9 +409,10 @@ all: all-external all-self
 		external/xlsxio/libxlsxio.a \
 		external/expat/libexpat.a \
 		external/zlib/libzlib.a \
-               $(NON_PRAAT_LIBRARIES) $(LDFLAGS)
+		external/voxalys_rust/target/release/libvoxalys_rust.a \
+		$(NON_PRAAT_LIBRARIES) $(LDFLAGS)
 
-all-external:
+all-external: voxalys_rust
 	$(MAKE) -C external/clapack
 	$(MAKE) -C external/gsl
 	$(MAKE) -C external/glpk
@@ -428,6 +429,9 @@ all-external:
 	$(MAKE) -C external/expat
 	$(MAKE) -C external/xlsxio
 	$(MAKE) -C external/zlib
+
+voxalys_rust:
+	$(MAKE) -C external/voxalys_rust
 
 all-self:
 	$(MAKE) -C kar
@@ -466,6 +470,7 @@ clean-external:
 	$(MAKE) -C external/expat clean
 	$(MAKE) -C external/xlsxio clean
 	$(MAKE) -C external/zlib clean
+	$(MAKE) -C external/voxalys_rust clean
 
 clean-self:
 	$(MAKE) -C kar clean
