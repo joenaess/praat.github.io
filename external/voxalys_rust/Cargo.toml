@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2007-2026 Jonas Lindh
+
+[package]
+name = "voxalys_rust"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jonas Lindh"]
+description = "Voxalys real-time VRP and JoVoice DSP/model static library for Praat"
+license = "GPL-3.0-or-later"
+
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[dependencies]
+ringbuf = "0.4"
+
+[dev-dependencies]
+approx = "0.5"

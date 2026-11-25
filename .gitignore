@@ -34,6 +34,9 @@ Praat
 Praat.exe
 Praat.app
 
+# Rust build artifacts
+external/voxalys_rust/target/
+
 # files created by R scripts in the test folders
 .Rdata
 .Rhistory
