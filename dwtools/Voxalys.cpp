@@ -337,46 +337,140 @@ static double hzToSemitones (double hz) noexcept {
 	return 12.0 * std::log2 (hz / 100.0);
 }
 
+static double midiToSemitones (int midi) noexcept {
+	const double hz = 440.0 * std::pow (2.0, static_cast<double> (midi - 69) / 12.0);
+	return hzToSemitones (hz);
+}
+
+static int hzToMidi (double hz) noexcept {
+	return static_cast<int> (std::lround (69.0 + 12.0 * std::log2 (hz / 440.0)));
+}
+
+static bool isBlackPianoKey (int midi) noexcept {
+	const int pc = ((midi % 12) + 12) % 12;
+	return pc == 1 || pc == 3 || pc == 6 || pc == 8 || pc == 10;
+}
+
+static conststring32 midiNoteName (int midi) {
+	static constexpr conststring32 names [12] = {
+		U"C", U"C#", U"D", U"D#", U"E", U"F", U"F#", U"G", U"G#", U"A", U"A#", U"B"
+	};
+	const int pc = ((midi % 12) + 12) % 12;
+	const int octave = (midi >= 0 ? midi / 12 : (midi - 11) / 12) - 1;
+	return Melder_cat (names [pc], static_cast<integer> (octave));
+}
+
+static void drawPianoKeyboardStrip (Graphics g, double viewF0Min, double viewF0Max, double xMin, double xMax, int liveMidi) {
+	Graphics_setWindow (g, xMin, xMax, 0.0, 1.0);
+	const int minMidi = static_cast<int> (std::floor (69.0 + 12.0 * std::log2 (viewF0Min / 440.0))) - 2;
+	const int maxMidi = static_cast<int> (std::ceil (69.0 + 12.0 * std::log2 (viewF0Max / 440.0))) + 2;
+
+	/* Pass 1: White keys spanning midpoints between adjacent white notes. */
+	Graphics_setLineWidth (g, 1.0);
+	Graphics_setFontSize (g, 8.0);
+	Graphics_setTextAlignment (g, Graphics_CENTRE, Graphics_BOTTOM);
+	for (int m = minMidi; m <= maxMidi; m ++) {
+		if (isBlackPianoKey (m))
+			continue;
+		const int prevW = isBlackPianoKey (m - 1) ? m - 2 : m - 1;
+		const int nextW = isBlackPianoKey (m + 1) ? m + 2 : m + 1;
+		const double rawL = 0.5 * (midiToSemitones (prevW) + midiToSemitones (m));
+		const double rawR = 0.5 * (midiToSemitones (m) + midiToSemitones (nextW));
+		const double xL = std::max (rawL, xMin);
+		const double xR = std::min (rawR, xMax);
+		if (xR <= xL)
+			continue;
+
+		Graphics_setColour (g, m == liveMidi ? Melder_CYAN : Melder_WHITE);
+		Graphics_fillRectangle (g, xL, xR, 0.0, 1.0);
+		Graphics_setColour (g, Melder_BLACK);
+		Graphics_rectangle (g, xL, xR, 0.0, 1.0);
+
+		/* Label every C octave (C2, C3, C4, C5, C6) and A2/A3/A4 inside white keys. */
+		const int pc = ((m % 12) + 12) % 12;
+		if (pc == 0 && (xR - xL) >= 0.45)
+			Graphics_text (g, 0.5 * (xL + xR), 0.06, midiNoteName (m));
+	}
+
+	/* Pass 2: Black keys centered on sharp/flat semitones, upper 62% of keyboard height. */
+	for (int m = minMidi; m <= maxMidi; m ++) {
+		if (! isBlackPianoKey (m))
+			continue;
+		const double cx = midiToSemitones (m);
+		const double xL = std::max (cx - 0.34, xMin);
+		const double xR = std::min (cx + 0.34, xMax);
+		if (xR <= xL)
+			continue;
+		Graphics_setColour (g, m == liveMidi ? Melder_RED : Melder_BLACK);
+		Graphics_fillRectangle (g, xL, xR, 0.38, 1.0);
+		Graphics_setColour (g, Melder_BLACK);
+		Graphics_rectangle (g, xL, xR, 0.38, 1.0);
+	}
+
+	/* Outer border and Hz frequency ticks right underneath the piano keyboard. */
+	Graphics_setColour (g, Melder_BLACK);
+	Graphics_setLineWidth (g, 1.0);
+	Graphics_rectangle (g, xMin, xMax, 0.0, 1.0);
+
+	Graphics_setFontSize (g, 9.0);
+	static constexpr double hzTicks [] = { 55.0, 65.41, 82.41, 110.0, 130.81, 164.81, 220.0, 261.63, 329.63, 440.0, 523.25, 659.25, 880.0, 1046.50 };
+	for (double hz : hzTicks) {
+		if (hz >= viewF0Min && hz <= viewF0Max)
+			Graphics_markBottom (g, hzToSemitones (hz), false, true, false, Melder_fixed (hz, 0));
+	}
+	Graphics_textBottom (g, true, U"Fundamental Frequency F0 (Piano Keys / Hz, semitone scale)");
+}
+
 static void drawVrpCanvas (VoxalysVrpRecorder me) {
 	if (! my graphics)
 		return;
 	Graphics g = my graphics.get();
 	Graphics_clearWs (g);
+
+	double outerX1 = 0.0, outerX2 = 0.0, outerY1 = 0.0, outerY2 = 0.0;
+	Graphics_inqViewport (g, & outerX1, & outerX2, & outerY1, & outerY2);
+
 	Graphics_setInner (g);
+	double ix1 = 0.0, ix2 = 0.0, iy1 = 0.0, iy2 = 0.0;
+	Graphics_inqViewport (g, & ix1, & ix2, & iy1, & iy2);
+	Graphics_unsetInner (g);
 
 	const double xMin = my useSemitoneScale ? hzToSemitones (my viewF0Min) : my viewF0Min;
 	const double xMax = my useSemitoneScale ? hzToSemitones (my viewF0Max) : my viewF0Max;
+	const int liveMidi = (my hasLatestPoint && my latestPoint.voiced && my latestPoint.f0_hz > 0.0f)
+		? hzToMidi (static_cast<double> (my latestPoint.f0_hz))
+		: -1;
+
+	/* Reserve bottom 16% of inner area for the aligned piano keyboard in semitone mode. */
+	const double plotBottomY = my useSemitoneScale ? (iy1 + 0.16 * (iy2 - iy1)) : iy1;
+
+	if (my useSemitoneScale) {
+		Graphics_setViewport (g, ix1, ix2, iy1, plotBottomY);
+		drawPianoKeyboardStrip (g, my viewF0Min, my viewF0Max, xMin, xMax, liveMidi);
+	}
+
+	/* Main VRP scatter & envelope viewport. */
+	Graphics_setViewport (g, ix1, ix2, plotBottomY, iy2);
 	Graphics_setWindow (g, xMin, xMax, my splFloor, my splCeiling);
 
-	/* Axes and grid. */
 	Graphics_setColour (g, Melder_BLACK);
 	Graphics_setLineWidth (g, 1.0);
 	Graphics_setFontSize (g, 10.0);
 	Graphics_drawInnerBox (g);
 
 	if (my useSemitoneScale) {
-		struct NoteLandmark { double hz; conststring32 label; };
-		static constexpr NoteLandmark landmarks [] = {
-			{ 55.00,   U"A1\n55" },
-			{ 65.41,   U"C2\n65" },
-			{ 82.41,   U"E2\n82" },
-			{ 110.00,  U"A2\n110" },
-			{ 130.81,  U"C3\n131" },
-			{ 164.81,  U"E3\n165" },
-			{ 220.00,  U"A3\n220" },
-			{ 261.63,  U"C4\n262" },
-			{ 329.63,  U"E4\n330" },
-			{ 440.00,  U"A4\n440" },
-			{ 523.25,  U"C5\n523" },
-			{ 659.25,  U"E5\n659" },
-			{ 880.00,  U"A5\n880" },
-			{ 1046.50, U"C6\n1047" },
-		};
-		for (const auto &lm : landmarks) {
-			if (lm.hz >= my viewF0Min && lm.hz <= my viewF0Max)
-				Graphics_markBottom (g, hzToSemitones (lm.hz), false, true, true, lm.label);
+		/* Subtle vertical octave reference lines aligned with C notes on the piano below. */
+		static constexpr double cNotes [] = { 65.41, 130.81, 261.63, 523.25, 1046.50 };
+		Graphics_setLineType (g, Graphics_DOTTED);
+		Graphics_setGrey (g, 0.72);
+		for (double hz : cNotes) {
+			if (hz > my viewF0Min && hz < my viewF0Max) {
+				const double cx = hzToSemitones (hz);
+				Graphics_line (g, cx, my splFloor, cx, my splCeiling);
+			}
 		}
-		Graphics_textBottom (g, true, U"Fundamental Frequency F0 (semitone scale: Note / Hz)");
+		Graphics_setLineType (g, Graphics_DRAWN);
+		Graphics_setColour (g, Melder_BLACK);
 	} else {
 		const double span = my viewF0Max - my viewF0Min;
 		const double stepHz = span <= 250.0 ? 25.0 : (span <= 550.0 ? 50.0 : 100.0);
@@ -453,7 +547,8 @@ static void drawVrpCanvas (VoxalysVrpRecorder me) {
 		Graphics_circle_mm (g, mapX (static_cast<double> (my latestPoint.f0_hz)), static_cast<double> (my latestPoint.spl_db), 4.0);
 	}
 
-	Graphics_unsetInner (g);
+	/* Restore outer viewport. */
+	Graphics_setViewport (g, outerX1, outerX2, outerY1, outerY2);
 }
 
 static void updateStatusLabel (VoxalysVrpRecorder me) {
@@ -466,9 +561,10 @@ static void updateStatusLabel (VoxalysVrpRecorder me) {
 			voicedCount ++;
 
 	if (my hasLatestPoint && my latestPoint.voiced) {
+		const int liveNote = hzToMidi (static_cast<double> (my latestPoint.f0_hz));
 		GuiLabel_setText (my statusLabel, Melder_cat (
 			my recording ? U"[REC] " : (my paused ? U"[PAUSED] " : U"[IDLE] "),
-			U"F0: ", Melder_fixed (my latestPoint.f0_hz, 1), U" Hz | ",
+			U"F0: ", Melder_fixed (my latestPoint.f0_hz, 1), U" Hz (", midiNoteName (liveNote), U") | ",
 			U"SPL: ", Melder_fixed (my latestPoint.spl_db, 1), U" dB | ",
 			U"Qual: ", Melder_fixed (my latestPoint.quality_score, 2),
 			U" (", phonationClassName (my latestPoint.phonation_class), U") | ",
